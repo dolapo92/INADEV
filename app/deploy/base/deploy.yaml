@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp
+        image:  {ACCOUNT_ID}.dkr.ecr.us-east-2.amazonaws.com/wheatherapp:1.0
+        imagePullPolicy: Always
+        ports:
+          - name: flaskport
+            containerPort: 5000
+        env:
+          - name: apikey
+            valueFrom:
+              secretKeyRef:
+                name: apikey
+                key: apikey
+      imagePullSecrets:
+          - name: regcred

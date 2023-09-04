@@ -1,0 +1,70 @@
+pipeline {
+  agent {
+    kubernetes {
+      yaml '''
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - name: kaniko
+            image: gcr.io/kaniko-project/executor:v1.14.0-debug
+            securityContext:
+              privileged: true
+            command:
+            - cat
+            tty: true
+            volumeMounts:
+             - mountPath: /var/run/docker.sock
+               name: docker-sock
+          - name: k8s
+            image: alpine/k8s:1.25.13
+            // securityContext:
+            //   privileged: true
+            command:
+            - cat
+            tty: true
+          volumes:
+          - name: docker-sock
+            hostPath:
+              path: /var/run/docker.sock    
+        '''
+    }
+  }
+    
+    stages {        
+        stage('Build Docker Image') {
+            steps {
+              container('kaniko') {
+                    sh '/kaniko/executor \
+                    --context "app"\
+                    --dockerfile "app/Dockerfile" \
+                    --destination "${ACCOUNT_NO}.dkr.ecr.us-east-2.amazonaws.com/wheatherapp:1.0"'
+              }
+
+            }
+        }
+        stage("Creating Openwheather ApiKey") {
+          steps {
+            container('k8s') {
+              sh 'kubectl create secret generic apikey --from-literal=apikey=${API_KEY}'
+            }
+          }
+        }
+        stage("deploying webapp") {
+          steps {
+            container('k8s') {
+              sh "sed -i 's/{ACCOUNT_ID}/ '$ACCOUNT_NO'/g' app/deploy/base/deploy.yaml && \
+                  kubectl apply -k app/deploy/overlay/dev/"
+            }
+          }
+        }
+    }
+    post {
+        success {
+            echo 'JOB triggered uccessfully!'
+        }
+        failure {
+            echo 'JOB failed!!'
+        }
+    }
+}
